@@ -1,6 +1,6 @@
 # Transformer from scratch
 
-**Open-source reimplementation** of the Transformer architecture, based on the paper ["Attention Is All You Need"](https://arxiv.org/abs/1706.03762) (Vaswani et al., 2017), enriched with my personal notes and explanations.
+**Open-source reimplementation** of the Transformer architecture, based on the paper [*Attention Is All You Need*](https://arxiv.org/abs/1706.03762) (Vaswani et al., 2017), enriched with my personal notes and explanations.
 
 
 It aims to be:
