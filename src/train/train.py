@@ -22,47 +22,6 @@ BOS_ID = 2
 EOS_ID = 3
 
 
-class EarlyStopping:
-    """
-    Early stopping to stop training when validation loss doesn't improve
-    """
-    def __init__(self, patience, min_delta=0.0, verbose=False):
-        self.patience = patience
-        self.min_delta = min_delta
-        self.verbose = verbose
-        self.counter = 0
-        self.best_loss = None
-        self.early_stop = False
-        self.best_epoch = 0
-    
-    def __call__(self, val_loss, epoch):
-        """
-        Call this after each validation
-        Returns True if training should stop
-        """
-        if self.best_loss is None:
-            self.best_loss = val_loss
-            self.best_epoch = epoch
-            if self.verbose:
-                logging.info(f"Initial validation loss: {val_loss:.3f}")
-        elif val_loss > self.best_loss - self.min_delta:
-            self.counter += 1
-            if self.verbose:
-                logging.info(f"EarlyStopping counter: {self.counter}/{self.patience}")
-            if self.counter >= self.patience:
-                self.early_stop = True
-                if self.verbose:
-                    logging.info(f"Early stopping triggered! Best epoch: {self.best_epoch}")
-        else:
-            self.best_loss = val_loss
-            self.best_epoch = epoch
-            self.counter = 0
-            if self.verbose:
-                logging.info(f"Validation loss improved to {val_loss:.3f}")
-        
-        return self.early_stop
-
-
 class TranslationDataset(Dataset):
     """
     Dataset for BPE-encoded parallel translation data
@@ -75,7 +34,7 @@ class TranslationDataset(Dataset):
         
         # load SentencePiece model and BPE-encoded data
         self.sp = spm.SentencePieceProcessor()
-        self.sp.load(sp_model_path)
+        self.sp.load(str(sp_model_path))
         self.src_data = []
         self.tgt_data = []
         
@@ -120,6 +79,47 @@ class TranslationDataset(Dataset):
         tgt_padded = pad_sequence(tgt_tensors, batch_first=True, padding_value=PAD_ID)
 
         return src_padded, tgt_padded
+
+
+class EarlyStopping:
+    """
+    Early stopping to stop training when validation loss doesn't improve
+    """
+    def __init__(self, patience, min_delta=0.0, verbose=False):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.verbose = verbose
+        self.counter = 0
+        self.best_loss = None
+        self.early_stop = False
+        self.best_epoch = 0
+    
+    def __call__(self, val_loss, epoch):
+        """
+        Call this after each validation
+        Returns True if training should stop
+        """
+        if self.best_loss is None:
+            self.best_loss = val_loss
+            self.best_epoch = epoch
+            if self.verbose:
+                logging.info(f"Initial validation loss: {val_loss:.3f}")
+        elif val_loss > self.best_loss - self.min_delta:
+            self.counter += 1
+            if self.verbose:
+                logging.info(f"EarlyStopping counter: {self.counter}/{self.patience}")
+            if self.counter >= self.patience:
+                self.early_stop = True
+                if self.verbose:
+                    logging.info(f"Early stopping triggered! Best epoch: {self.best_epoch}")
+        else:
+            self.best_loss = val_loss
+            self.best_epoch = epoch
+            self.counter = 0
+            if self.verbose:
+                logging.info(f"Validation loss improved to {val_loss:.3f}")
+        
+        return self.early_stop
 
 
 def create_pad_mask(seq, pad_idx=PAD_ID):
@@ -220,7 +220,7 @@ def save_checkpoint(model, optimizer, epoch, loss, checkpoint_dir):
         'optimizer_state_dict': optimizer.state_dict(),
         'loss': loss,
     }
-    checkpoint_path = checkpoint_dir / f'transformer_epoch_{epoch}.pth'
+    checkpoint_path = checkpoint_dir / f'transformer_epoch_{epoch}.pt'
     torch.save(checkpoint, checkpoint_path)
     logging.info(f"Checkpoint saved: {checkpoint_path}")
 
@@ -237,8 +237,9 @@ def load_checkpoint(model, optimizer, checkpoint_path):
 
 
 def main():
-    device = torch.device("cuda" if torch.cuda.is_available()
-                         else "cpu")
+    if not torch.cuda.is_available():
+        raise ValueError("CUDA is not available")
+    device = torch.device("cuda")
     logging.info(f"Using device: {device}")
 
     # Hyperparameters
@@ -261,7 +262,7 @@ def main():
 
     # load SentencePiece model to get vocab size
     sp = spm.SentencePieceProcessor()
-    sp.load(SP_MODEL_PATH)
+    sp.load(str(SP_MODEL_PATH))
     actual_vocab_size = sp.get_piece_size()
     logging.info(f"SentencePiece model loaded with vocabulary size: {actual_vocab_size}")
 
@@ -307,8 +308,8 @@ def main():
     
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    logging.info(f"Total parameters: {total_params:,}")
-    logging.info(f"Trainable parameters: {trainable_params:,}")
+    logging.info(f"Total parameters: {total_params:,} ({total_params / 1e6:.1f} M)")
+    logging.info(f"Trainable parameters: {trainable_params:,} ({trainable_params / 1e6:.1f} M)")
     
     optimizer = optim.Adam(model.parameters(), lr=LR, betas=(0.9, 0.98), eps=1e-9)
     
