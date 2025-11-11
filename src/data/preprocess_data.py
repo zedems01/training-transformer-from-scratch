@@ -36,6 +36,7 @@ def encode_with_sentencepiece(sp_model_path, input_file, output_file):
 def split_parallel_data(raw_dir, output_dir, train_ratio=0.98, val_ratio=0.01, max_sentences=100000):
     """
     Split the combined parallel data into train/validation/test sets.
+    
     Args:
         max_sentences: Maximum number of sentence pairs to use (default: 100k pairs)
     """
