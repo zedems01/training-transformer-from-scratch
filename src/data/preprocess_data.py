@@ -1,40 +1,9 @@
 import os
 import sentencepiece as spm
-from tqdm import tqdm
 import logging
 import argparse
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - [%(levelname)s] - %(message)s')
-
-# def combine_parallel_files(raw_dir, output_file):
-#     """
-#     Combine all downloaded WMT14 English and French files into a single file for BPE training.
-#     """
-#     logging.info(f"Combining files into {output_file}")
-    
-#     # parallel files from our downloaded dataset
-#     parallel_files = [
-#         ('europarl-v7.fr-en.en', 'europarl-v7.fr-en.fr'),
-#         ('commoncrawl.fr-en.en', 'commoncrawl.fr-en.fr'),
-#         ('news-commentary-v9.fr-en.en', 'news-commentary-v9.fr-en.fr')
-#     ]
-    
-#     with open(output_file, 'w', encoding='utf-8') as outfile:
-#         for en_file, fr_file in parallel_files:
-#             en_path = os.path.join(raw_dir, en_file)
-#             fr_path = os.path.join(raw_dir, fr_file)
-#             if not (os.path.exists(en_path) and os.path.exists(fr_path)):
-#                 logging.warning(f"Warning: Could not find {en_file} or {fr_file}")
-#                 continue
-                
-#             logging.info(f"Processing {en_file} and {fr_file}")
-            
-#             # add English text
-#             with open(en_path, 'r', encoding='utf-8') as f:
-#                 outfile.write(f.read())
-#             # add French text
-#             with open(fr_path, 'r', encoding='utf-8') as f:
-#                 outfile.write(f.read())
 
 
 def train_sentencepiece(input_file, model_prefix, vocab_size=32000):

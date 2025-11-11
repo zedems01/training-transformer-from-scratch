@@ -1,9 +1,10 @@
-import os
 import urllib.request
 import tarfile
 from tqdm import tqdm
 import logging
 import argparse
+from src.config import RAW_DATA_DIR
+from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - [%(levelname)s] - %(message)s')
 
@@ -19,7 +20,7 @@ def download_url(url, output_path):
                            miniters=1, desc=url.split('/')[-1]) as t:
         urllib.request.urlretrieve(url, filename=output_path, reporthook=t.update_to)
 
-def download_wmt14_en_fr(data_dir="./src/data/raw"):
+def download_wmt14_en_fr(data_dir=RAW_DATA_DIR):
     """
     Download and extract WMT14 English-French dataset.
     The dataset includes:
@@ -27,8 +28,8 @@ def download_wmt14_en_fr(data_dir="./src/data/raw"):
     - Common Crawl corpus
     - News Commentary
     """
-    os.makedirs(data_dir, exist_ok=True)
-    
+    data_dir.mkdir(parents=True, exist_ok=True)
+
     # dataset urls for French-English
     urls = {
         'europarl': 'https://www.statmt.org/europarl/v7/fr-en.tgz',
@@ -40,8 +41,8 @@ def download_wmt14_en_fr(data_dir="./src/data/raw"):
     for dataset_name, url in urls.items():
         logging.info(f"Downloading {dataset_name}...")
         
-        output_file = os.path.join(data_dir, f"{dataset_name}.tgz")
-        if not os.path.exists(output_file):
+        output_file = data_dir / f"{dataset_name}.tgz"
+        if not output_file.exists():
             download_url(url, output_file)
         
         logging.info(f"Extracting {dataset_name}...")
@@ -49,12 +50,12 @@ def download_wmt14_en_fr(data_dir="./src/data/raw"):
             tar.extractall(path=data_dir, filter='data')
         
         # clean up tgz file
-        os.remove(output_file)
+        output_file.unlink(missing_ok=True)
     
     logging.info(f"Download complete! Dataset is ready in {data_dir}\n")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Download WMT14 English-French dataset')
-    parser.add_argument('--data-dir', type=str, default='./src/data/raw', help='Directory to save the dataset')
+    parser.add_argument('--data-dir', type=str, default=str(RAW_DATA_DIR), help='Directory to save the dataset')
     args = parser.parse_args()
-    download_wmt14_en_fr(args.data_dir)
+    download_wmt14_en_fr(Path(args.data_dir))
