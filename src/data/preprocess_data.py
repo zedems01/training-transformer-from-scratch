@@ -44,7 +44,10 @@ def train_sentencepiece(input_file, model_prefix, vocab_size=32000):
     logging.info(f"Training SentencePiece model with vocab size {vocab_size}")
     spm.SentencePieceTrainer.Train(
         f"--input={input_file} --model_prefix={model_prefix} --vocab_size={vocab_size} "
-        "--model_type=bpe --user_defined_symbols=<PAD>,<SOS>,<EOS> --minloglevel=2"
+        "--model_type=bpe --minloglevel=2 "
+        "--user_defined_symbols=<PAD>,<BOS>,<EOS> "
+        "--unk_id=0 --pad_id=1 --bos_id=2 --eos_id=3 "
+        "--unk_piece=<UNK> --pad_piece=<PAD> --bos_piece=<BOS> --eos_piece=<EOS>"
     )
 
 
