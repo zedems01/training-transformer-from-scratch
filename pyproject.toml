@@ -8,6 +8,8 @@ dependencies = [
     "torchaudio>=2.7.0",
     "jupyter>=1.1.1",
     "matplotlib>=3.10.7",
+    "sentencepiece>=0.2.1",
+    "tqdm>=4.67.1",
 ]
 
 [[tool.uv.index]]
