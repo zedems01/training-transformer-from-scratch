@@ -8,6 +8,7 @@ from torch.nn.utils.rnn import pad_sequence
 import sentencepiece as spm
 from tqdm import tqdm
 from pathlib import Path
+from transformers import get_linear_schedule_with_warmup
 from src.models.transformer import Transformer
 from src.config import PROCESSED_DATA_DIR, CHECKPOINTS_DIR
 
@@ -19,6 +20,48 @@ UNK_ID = 0
 PAD_ID = 1
 BOS_ID = 2
 EOS_ID = 3
+
+
+class EarlyStopping:
+    """
+    Early stopping to stop training when validation loss doesn't improve
+    """
+    def __init__(self, patience, min_delta=0.0, verbose=False):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.verbose = verbose
+        self.counter = 0
+        self.best_loss = None
+        self.early_stop = False
+        self.best_epoch = 0
+    
+    def __call__(self, val_loss, epoch):
+        """
+        Call this after each validation
+        Returns True if training should stop
+        """
+        if self.best_loss is None:
+            self.best_loss = val_loss
+            self.best_epoch = epoch
+            if self.verbose:
+                logging.info(f"Initial validation loss: {val_loss:.3f}")
+        elif val_loss > self.best_loss - self.min_delta:
+            self.counter += 1
+            if self.verbose:
+                logging.info(f"EarlyStopping counter: {self.counter}/{self.patience}")
+            if self.counter >= self.patience:
+                self.early_stop = True
+                if self.verbose:
+                    logging.info(f"Early stopping triggered! Best epoch: {self.best_epoch}")
+        else:
+            self.best_loss = val_loss
+            self.best_epoch = epoch
+            self.counter = 0
+            if self.verbose:
+                logging.info(f"Validation loss improved to {val_loss:.3f}")
+        
+        return self.early_stop
+
 
 class TranslationDataset(Dataset):
     """
@@ -97,7 +140,7 @@ def create_subsequent_mask(seq_len, device):
     return mask.unsqueeze(0).unsqueeze(0)  # (1, 1, T, T)
 
 
-def train_one_epoch(model, dataloader, optimizer, criterion, device, epoch):
+def train_one_epoch(model, dataloader, optimizer, scheduler, criterion, device, epoch):
     """Train the model for one epoch"""
     model.train()
     total_loss = 0
@@ -131,8 +174,9 @@ def train_one_epoch(model, dataloader, optimizer, criterion, device, epoch):
         loss.backward()
         # gradient clipping for stability
         nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        # update model parameters
+        # update model parameters and learning rate
         optimizer.step()
+        scheduler.step()
 
         total_loss += loss.item()
         pbar.set_postfix({'loss': f'{loss.item():.3f}'})
@@ -206,8 +250,10 @@ def main():
     DROPOUT = 0.1
     BATCH_SIZE = 16
     EPOCHS = 10
-    LR = 1e-4
+    LR = 5e-4
     MAX_SEQ_LEN = 512
+    WARMUP_STEPS = 4000
+    EARLY_STOPPING_PATIENCE = 3
 
     if not SP_MODEL_PATH.exists():
         raise FileNotFoundError(f"SentencePiece model not found at {SP_MODEL_PATH}. "
@@ -225,7 +271,7 @@ def main():
         sp_model_path=SP_MODEL_PATH,
         max_len=MAX_SEQ_LEN
     )
-    
+
     val_dataset = TranslationDataset(
         src_file=PROCESSED_DATA_DIR / "valid.en.bpe",
         tgt_file=PROCESSED_DATA_DIR / "valid.fr.bpe",
@@ -264,10 +310,20 @@ def main():
     logging.info(f"Total parameters: {total_params:,}")
     logging.info(f"Trainable parameters: {trainable_params:,}")
     
-    # initialize optimizer with warmup
     optimizer = optim.Adam(model.parameters(), lr=LR, betas=(0.9, 0.98), eps=1e-9)
+    
+    # create learning rate scheduler with linear warmup
+    total_steps = len(train_loader) * EPOCHS
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer,
+        num_warmup_steps=WARMUP_STEPS,
+        num_training_steps=total_steps
+    )
+    logging.info(f"Scheduler created: {WARMUP_STEPS} warmup steps, {total_steps} total steps")
+    
     # use label smoothing for better generalization
     criterion = nn.CrossEntropyLoss(ignore_index=PAD_ID, label_smoothing=0.1)
+    early_stopping = EarlyStopping(patience=EARLY_STOPPING_PATIENCE, verbose=True)
 
     # training loop
     best_val_loss = float('inf')
@@ -276,17 +332,21 @@ def main():
         logging.info(f"Epoch {epoch}/{EPOCHS}")
         logging.info(f"{'='*50}")
         
-        train_loss = train_one_epoch(model, train_loader, optimizer, criterion, device, epoch)
+        train_loss = train_one_epoch(model, train_loader, optimizer, scheduler, criterion, device, epoch)
         val_loss = validate(model, val_loader, criterion, device)
         
         logging.info(f"Train Loss: {train_loss:.3f} | Val Loss: {val_loss:.3f}")
         
+        # save checkpoint if validation loss improved
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             save_checkpoint(model, optimizer, epoch, val_loss, checkpoint_dir=CHECKPOINTS_DIR)
-            logging.info(f"New best validation loss: {val_loss:.3f}")
+        
+        if early_stopping(val_loss, epoch):
+            logging.info(f"Early stopping at epoch {epoch}")
+            break
 
-    logging.info("Training complete!")
+    logging.info(f"Training complete! Best validation loss: {best_val_loss:.3f}")
 
 
 if __name__ == "__main__":
