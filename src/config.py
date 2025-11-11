@@ -4,13 +4,14 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - [%(levelname)s] - %(message)s')
 
 
-PROJ_ROOT = Path(__file__).resolve().parents[0]
+PROJ_ROOT = Path(__file__).resolve().parents[1]
 logging.info(f"PROJ_ROOT path is: {PROJ_ROOT}")
 
-DATA_DIR = PROJ_ROOT / "data"
+SRC_DIR = PROJ_ROOT / "src"
+DATA_DIR = SRC_DIR / "data"
 RAW_DATA_DIR = DATA_DIR / "raw"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
-MODELS_DIR = PROJ_ROOT / "models"
-TRAIN_DIR = PROJ_ROOT / "train"
+MODELS_DIR = SRC_DIR / "models"
+TRAIN_DIR = SRC_DIR / "train"
 CHECKPOINTS_DIR = TRAIN_DIR / "checkpoints"
 
