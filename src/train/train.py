@@ -1,5 +1,3 @@
-import os
-import math
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -11,6 +9,8 @@ from pathlib import Path
 from transformers import get_linear_schedule_with_warmup
 from src.models.transformer import Transformer
 from src.config import PROCESSED_DATA_DIR, CHECKPOINTS_DIR
+import argparse
+from pathlib import Path
 
 import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - [%(levelname)s] - %(message)s')
@@ -236,25 +236,40 @@ def load_checkpoint(model, optimizer, checkpoint_path):
     return epoch, loss
 
 
-def main():
+def train_transformer(
+    d_model=512,
+    num_heads=8,
+    d_ff=2048,
+    num_layers=6,
+    dropout=0.1,
+    batch_size=16,
+    epochs=10,
+    lr=5e-4,
+    max_seq_len=512,
+    warmup_steps=4000,
+    early_stopping_patience=3,
+    num_workers=8,
+    sp_model_path=PROCESSED_DATA_DIR / "sp_bpe.model",
+    checkpoint_dir=CHECKPOINTS_DIR
+):
     if not torch.cuda.is_available():
         raise ValueError("CUDA is not available")
     device = torch.device("cuda")
     logging.info(f"Using device: {device}")
 
     # Hyperparameters
-    SP_MODEL_PATH = PROCESSED_DATA_DIR / "sp_bpe.model"
-    D_MODEL = 512
-    NUM_HEADS = 8
-    D_FF = 2048
-    NUM_LAYERS = 6
-    DROPOUT = 0.1
-    BATCH_SIZE = 16
-    EPOCHS = 10
-    LR = 5e-4
-    MAX_SEQ_LEN = 512
-    WARMUP_STEPS = 4000
-    EARLY_STOPPING_PATIENCE = 3
+    SP_MODEL_PATH = sp_model_path
+    # D_MODEL = d_model
+    NUM_HEADS = num_heads
+    D_FF = d_ff
+    NUM_LAYERS = num_layers
+    DROPOUT = dropout
+    BATCH_SIZE = batch_size
+    EPOCHS = epochs
+    LR = lr
+    MAX_SEQ_LEN = max_seq_len
+    WARMUP_STEPS = warmup_steps
+    EARLY_STOPPING_PATIENCE = early_stopping_patience
 
     if not SP_MODEL_PATH.exists():
         raise FileNotFoundError(f"SentencePiece model not found at {SP_MODEL_PATH}. "
@@ -285,7 +300,7 @@ def main():
         batch_size=BATCH_SIZE,
         shuffle=True,
         collate_fn=TranslationDataset.collate_fn,
-        num_workers=0
+        num_workers=num_workers
     )
     
     val_loader = DataLoader(
@@ -293,13 +308,13 @@ def main():
         batch_size=BATCH_SIZE,
         shuffle=False,
         collate_fn=TranslationDataset.collate_fn,
-        num_workers=0
+        num_workers=num_workers
     )
     
     model = Transformer(
         src_vocab_size=actual_vocab_size,
         tgt_vocab_size=actual_vocab_size,
-        d_model=D_MODEL,
+        d_model=d_model,
         num_heads=NUM_HEADS,
         d_ff=D_FF,
         num_layers=NUM_LAYERS,
@@ -341,7 +356,7 @@ def main():
         # save checkpoint if validation loss improved
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            save_checkpoint(model, optimizer, epoch, val_loss, checkpoint_dir=CHECKPOINTS_DIR)
+            save_checkpoint(model, optimizer, epoch, val_loss, checkpoint_dir=checkpoint_dir)
         
         if early_stopping(val_loss, epoch):
             logging.info(f"Early stopping at epoch {epoch}")
@@ -351,4 +366,49 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Train Transformer for English-French translation")
+    
+    parser.add_argument('--d-model', type=int, default=512,
+                        help='Dimension of model embeddings and layers')
+    parser.add_argument('--num-heads', type=int, default=8,
+                        help='Number of attention heads')
+    parser.add_argument('--d-ff', type=int, default=2048,
+                        help='Dimension of feedforward network')
+    parser.add_argument('--num-layers', type=int, default=6,
+                        help='Number of encoder/decoder layers')
+    parser.add_argument('--dropout', type=float, default=0.1,
+                        help='Dropout rate')
+    parser.add_argument('--batch-size', type=int, default=16,
+                        help='Batch size for training')
+    parser.add_argument('--epochs', type=int, default=10,
+                        help='Number of training epochs')
+    parser.add_argument('--lr', type=float, default=5e-4,
+                        help='Learning rate')
+    parser.add_argument('--max-seq-len', type=int, default=512,
+                        help='Maximum sequence length')
+    parser.add_argument('--warmup-steps', type=int, default=4000,
+                        help='Number of warmup steps for learning rate scheduler')
+    parser.add_argument('--early-stopping-patience', type=int, default=3,
+                        help='Early stopping patience (epochs)')
+    parser.add_argument('--num-workers', type=int, default=8,
+                        help='Number of workers for data loading')
+    parser.add_argument('--sp-model-path', type=str, default=str(PROCESSED_DATA_DIR / "sp_bpe.model"),
+                        help='Path to SentencePiece model')
+    
+    args = parser.parse_args()
+    
+    train_transformer(
+        d_model=args.d_model,
+        num_heads=args.num_heads,
+        d_ff=args.d_ff,
+        num_layers=args.num_layers,
+        dropout=args.dropout,
+        batch_size=args.batch_size,
+        epochs=args.epochs,
+        lr=args.lr,
+        max_seq_len=args.max_seq_len,
+        warmup_steps=args.warmup_steps,
+        early_stopping_patience=args.early_stopping_patience,
+        num_workers=args.num_workers,
+        sp_model_path=Path(args.sp_model_path)
+    )

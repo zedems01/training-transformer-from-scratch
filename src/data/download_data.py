@@ -56,6 +56,7 @@ def download_wmt14_en_fr(data_dir=RAW_DATA_DIR):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Download WMT14 English-French dataset')
-    parser.add_argument('--data-dir', type=str, default=str(RAW_DATA_DIR), help='Directory to save the dataset')
+    parser.add_argument('--data-dir', type=str, default=str(RAW_DATA_DIR),
+                        help='Directory to save the raw dataset')
     args = parser.parse_args()
     download_wmt14_en_fr(Path(args.data_dir))

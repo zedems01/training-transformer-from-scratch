@@ -142,12 +142,15 @@ def process_data(raw_dir="./src/data/raw", processed_dir="./src/data/processed",
     logging.info("Data processing complete!\n")
 
 if __name__ == "__main__":
-    # process_data(max_sentences=100000)
     parser = argparse.ArgumentParser(description='Process WMT14 English-French dataset')
-    parser.add_argument('--raw-dir', type=str, default='./src/data/raw', help='Directory to save the raw dataset')
-    parser.add_argument('--processed-dir', type=str, default='./src/data/processed', help='Directory to save the processed dataset')
-    parser.add_argument('--vocab-size', type=int, default=32000, help='Vocabulary size')
-    parser.add_argument('--max-sentences', type=int, default=100000, help='Maximum number of sentence pairs to use')
+    parser.add_argument('--raw-dir', type=str, default='./src/data/raw',
+                        help='Directory to save the raw dataset')
+    parser.add_argument('--processed-dir', type=str, default='./src/data/processed',
+                        help='Directory to save the processed dataset')
+    parser.add_argument('--vocab-size', type=int, default=32000,
+                        help='Vocabulary size')
+    parser.add_argument('--max-sentences', type=int, default=100000,
+                        help='Maximum number of sentence pairs to use')
     args = parser.parse_args()
     process_data(raw_dir=args.raw_dir, processed_dir=args.processed_dir, vocab_size=args.vocab_size, max_sentences=args.max_sentences)
     
