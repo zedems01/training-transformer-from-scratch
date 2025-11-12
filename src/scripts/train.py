@@ -1,24 +1,41 @@
+import logging
+import argparse
+from pathlib import Path
+from tqdm import tqdm
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, Dataset
 from torch.nn.utils.rnn import pad_sequence
-import sentencepiece as spm
-from tqdm import tqdm
-from pathlib import Path
+from torch.utils.data import DataLoader, Dataset
 from transformers import get_linear_schedule_with_warmup
-from src.models.transformer import Transformer
-from src.config import PROCESSED_DATA_DIR, CHECKPOINTS_DIR
-import argparse
+import sentencepiece as spm
 
-import logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - [%(levelname)s] - %(message)s')
-
-# special token IDs
-UNK_ID = 0
-PAD_ID = 1
-BOS_ID = 2
-EOS_ID = 3
+from src.scripts.utils import create_pad_mask, create_subsequent_mask
+from src.scripts.transformer import Transformer
+from src.config import (
+    CHECKPOINTS_DIR,
+    PAD_ID,
+    BOS_ID,
+    EOS_ID,
+    D_MODEL,
+    NUM_HEADS,
+    D_FF,
+    NUM_LAYERS,
+    DROPOUT,
+    BATCH_SIZE,
+    EPOCHS,
+    LR,
+    MAX_SEQ_LEN,
+    WARMUP_STEPS,
+    EARLY_STOPPING_PATIENCE,
+    NUM_WORKERS,
+    SP_MODEL_PATH,
+    TRAIN_SRC_FILE,
+    TRAIN_TGT_FILE,
+    VALID_SRC_FILE,
+    VALID_TGT_FILE,
+)
 
 
 class TranslationDataset(Dataset):
@@ -121,22 +138,22 @@ class EarlyStopping:
         return self.early_stop
 
 
-def create_pad_mask(seq, pad_idx=PAD_ID):
-    """
-    Create a padding mask for attention: (B, 1, 1, T)
-    True/1 = valid token, False/0 = padded token
-    Compatible with attention scores broadcasting
-    """
-    mask = (seq != pad_idx)     # (B, T)
-    return mask.unsqueeze(1).unsqueeze(2)    # (B, 1, 1, T)
+# def create_pad_mask(seq, pad_idx):
+#     """
+#     Create a padding mask for attention: (B, 1, 1, T)
+#     True/1 = valid token, False/0 = padded token
+#     Compatible with attention scores broadcasting
+#     """
+#     mask = (seq != pad_idx)     # (B, T)
+#     return mask.unsqueeze(1).unsqueeze(2)    # (B, 1, 1, T)
 
-def create_subsequent_mask(seq_len, device):
-    """
-    Create causal mask for decoder's self-attention: (1, 1, T, T)
-    True/1 = allowed position, False/0 = masked future position
-    """
-    mask = torch.triu(torch.ones(seq_len, seq_len, device=device), diagonal=1) == 0
-    return mask.unsqueeze(0).unsqueeze(0)  # (1, 1, T, T)
+# def create_subsequent_mask(seq_len, device):
+#     """
+#     Create causal mask for decoder's self-attention: (1, 1, T, T)
+#     True/1 = allowed position, False/0 = masked future position
+#     """
+#     mask = torch.triu(torch.ones(seq_len, seq_len, device=device), diagonal=1) == 0
+#     return mask.unsqueeze(0).unsqueeze(0)  # (1, 1, T, T)
 
 
 def train_one_epoch(model, dataloader, optimizer, scheduler, criterion, device, epoch):
@@ -210,65 +227,60 @@ def validate(model, dataloader, criterion, device):
     return total_loss / len(dataloader)
 
 
-def save_checkpoint(model, optimizer, epoch, loss, checkpoint_dir):
+def save_checkpoints(model, optimizer, epoch, loss, config, checkpoints_dir, model_name=None):
     """Save model checkpoint."""
-    checkpoint_dir.mkdir(parents=True, exist_ok=True)
-    checkpoint = {
+    checkpoints_dir.mkdir(parents=True, exist_ok=True)
+    checkpoints = {
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'loss': loss,
+        'model_config': config
     }
-    checkpoint_path = checkpoint_dir / f'transformer_epoch_{epoch}.pt'
-    torch.save(checkpoint, checkpoint_path)
-    logging.info(f"Checkpoint saved: {checkpoint_path}")
+    if not model_name:
+        model_name = 'best'
+    checkpoints_path = checkpoints_dir / f'{model_name}.pt'
+    torch.save(checkpoints, checkpoints_path)
+    logging.info(f"Checkpoint saved: {checkpoints_path}")
 
 
-def load_checkpoint(model, optimizer, checkpoint_path):
-    """Load model checkpoint."""
-    checkpoint = torch.load(checkpoint_path)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    epoch = checkpoint['epoch']
-    loss = checkpoint['loss']
-    logging.info(f"Checkpoint loaded from epoch {epoch}, loss: {loss:.3f}")
-    return epoch, loss
+# def load_checkpoints(model, optimizer, config, checkpoints_path):
+#     """Load model checkpoints."""
+#     checkpoints = torch.load(checkpoints_path)
+#     model.load_state_dict(checkpoints['model_state_dict'])
+#     optimizer.load_state_dict(checkpoints['optimizer_state_dict'])
+#     epoch = checkpoints['epoch']
+#     loss = checkpoints['loss']
+#     config = checkpoints['model_config']
+#     logging.info(f"Checkpoints loaded from epoch {epoch}, loss: {loss:.3f}")
+#     return epoch, loss, config
 
 
-def train_transformer(
-    d_model,
-    num_heads,
-    d_ff,
-    num_layers,
-    dropout,
-    batch_size,
-    epochs,
-    lr,
-    max_seq_len,
-    warmup_steps,
-    early_stopping_patience,
-    num_workers,
-    sp_model_path=PROCESSED_DATA_DIR / "sp_bpe.model",
-    checkpoint_dir=CHECKPOINTS_DIR
-):
+def train_transformer(config):
     if not torch.cuda.is_available():
         raise ValueError("CUDA is not available")
     device = torch.device("cuda")
     logging.info(f"Using device: {device}")
 
-    # Hyperparameters
-    # SP_MODEL_PATH = PROCESSED_DATA_DIR / "sp_bpe.model"
-    # D_MODEL = 512
-    # NUM_HEADS = 8
-    # D_FF = 2048
-    # NUM_LAYERS = 6
-    # DROPOUT = 0.1
-    # BATCH_SIZE = 16
-    # EPOCHS = 10
-    # LR = 5e-4
-    # MAX_SEQ_LEN = 512
-    # WARMUP_STEPS = 4000
-    # EARLY_STOPPING_PATIENCE = 3
+    d_model = config['d_model']
+    num_heads = config['heads']
+    d_ff = config['d_ff']
+    num_layers = config['num_layers']
+    dropout = config['dropout']
+    batch_size = config['batch_size']
+    epochs = config['epochs']
+    lr = config['lr']
+    max_seq_len = config['max_seq_len']
+    warmup_steps = config['warmup_steps']
+    early_stopping_patience = config['early_stopping_patience']
+    num_workers = config['num_workers']
+    sp_model_path = Path(config['sp_model_path'])
+    train_src_file = Path(config['train_src_file'])
+    train_tgt_file = Path(config['train_tgt_file'])
+    valid_src_file = Path(config['valid_src_file'])
+    valid_tgt_file = Path(config['valid_tgt_file'])
+    checkpoints_dir = Path(config['checkpoints_dir'])
+    model_name = config['model_name']
 
     if not sp_model_path.exists():
         raise FileNotFoundError(f"SentencePiece model not found at {sp_model_path}. "
@@ -281,15 +293,15 @@ def train_transformer(
     logging.info(f"SentencePiece model loaded with vocabulary size: {actual_vocab_size}")
 
     train_dataset = TranslationDataset(
-        src_file=PROCESSED_DATA_DIR / "train.en.bpe",
-        tgt_file=PROCESSED_DATA_DIR / "train.fr.bpe",
+        src_file=train_src_file,
+        tgt_file=train_tgt_file,
         sp_model_path=sp_model_path,
         max_len=max_seq_len
     )
 
     val_dataset = TranslationDataset(
-        src_file=PROCESSED_DATA_DIR / "valid.en.bpe",
-        tgt_file=PROCESSED_DATA_DIR / "valid.fr.bpe",
+        src_file=valid_src_file,
+        tgt_file=valid_tgt_file,
         sp_model_path=sp_model_path,
         max_len=max_seq_len
     )
@@ -355,7 +367,7 @@ def train_transformer(
         # save checkpoint if validation loss improved
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            save_checkpoint(model, optimizer, epoch, val_loss, checkpoint_dir=checkpoint_dir)
+            save_checkpoints(model, optimizer, epoch, val_loss, config, checkpoints_dir, model_name)
         
         if early_stopping(val_loss, epoch):
             logging.info(f"Early stopping at epoch {epoch}")
@@ -369,47 +381,45 @@ def main():
         description="Train Transformer for English-French translation",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument('--d-model', type=int, default=512,
+    parser.add_argument('--d-model', type=int, default=D_MODEL,
                         help='Dimension of model embeddings and layers')
-    parser.add_argument('--heads', type=int, default=8,
+    parser.add_argument('--heads', type=int, default=NUM_HEADS,
                         help='Number of attention heads')
-    parser.add_argument('--d-ff', type=int, default=2048,
+    parser.add_argument('--d-ff', type=int, default=D_FF,
                         help='Dimension of feedforward network')
-    parser.add_argument('--num-layers', type=int, default=6,
+    parser.add_argument('--num-layers', type=int, default=NUM_LAYERS,
                         help='Number of encoder/decoder layers')
-    parser.add_argument('--dropout', type=float, default=0.1,
+    parser.add_argument('--dropout', type=float, default=DROPOUT,
                         help='Dropout rate')
-    parser.add_argument('--batch', type=int, default=16,
+    parser.add_argument('--batch-size', type=int, default=BATCH_SIZE,
                         help='Batch size for training')
-    parser.add_argument('--epochs', type=int, default=10,
+    parser.add_argument('--epochs', type=int, default=EPOCHS,
                         help='Number of training epochs')
-    parser.add_argument('--lr', type=float, default=5e-4,
+    parser.add_argument('--lr', type=float, default=LR,
                         help='Learning rate')
-    parser.add_argument('--max-seq-len', type=int, default=512,
+    parser.add_argument('--max-seq-len', type=int, default=MAX_SEQ_LEN,
                         help='Maximum sequence length')
-    parser.add_argument('--warmup-steps', type=int, default=4000,
+    parser.add_argument('--warmup-steps', type=int, default=WARMUP_STEPS,
                         help='Number of warmup steps')
-    parser.add_argument('--early-stopping-patience', type=int, default=3,
+    parser.add_argument('--early-stopping-patience', type=int, default=EARLY_STOPPING_PATIENCE,
                         help='Number of epochs to wait for early stopping')
-    parser.add_argument('--num-workers', type=int, default=0,
+    parser.add_argument('--num-workers', type=int, default=NUM_WORKERS,
                         help='Number of workers for data loading')
+    parser.add_argument('--model-name', type=str, default='best',
+                        help='Name of the model, not including the extension')
     
     args = parser.parse_args()
-    train_transformer(
-        d_model=args.d_model,
-        num_heads=args.heads,
-        d_ff=args.d_ff,
-        num_layers=args.num_layers,
-        dropout=args.dropout,
-        batch_size=args.batch,
-        epochs=args.epochs,
-        lr=args.lr,
-        max_seq_len=args.max_seq_len,
-        warmup_steps=args.warmup_steps,
-        early_stopping_patience=args.early_stopping_patience,
-        num_workers=args.num_workers
-    )
+    config = args.__dict__
+    config['sp_model_path'] = SP_MODEL_PATH
+    config['checkpoints_dir'] = CHECKPOINTS_DIR
+    config['train_src_file'] = TRAIN_SRC_FILE
+    config['train_tgt_file'] = TRAIN_TGT_FILE
+    config['valid_src_file'] = VALID_SRC_FILE
+    config['valid_tgt_file'] = VALID_TGT_FILE
+    
+    train_transformer(config)
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - [%(levelname)s] - %(message)s')
     main()
