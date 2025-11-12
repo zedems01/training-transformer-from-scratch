@@ -2,11 +2,15 @@ import os
 import sentencepiece as spm
 import logging
 import argparse
+from src.config import (
+    TRAIN_RATIO,
+    VAL_RATIO,
+    VOCAB_SIZE,
+    MAX_SENTENCES
+)
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - [%(levelname)s] - %(message)s')
 
-
-def train_sentencepiece(input_file, model_prefix, vocab_size=32000):
+def train_sentencepiece(input_file, model_prefix, vocab_size):
     """
     Train SentencePiece model on a combined text file of source + target.
     """
@@ -33,7 +37,13 @@ def encode_with_sentencepiece(sp_model_path, input_file, output_file):
             fout.write(" ".join(pieces) + "\n")
 
 
-def split_parallel_data(raw_dir, output_dir, train_ratio=0.98, val_ratio=0.01, max_sentences=100000):
+def split_parallel_data(
+    raw_dir,
+    output_dir,
+    train_ratio,
+    val_ratio,
+    max_sentences
+):
     """
     Split the combined parallel data into train/validation/test sets.
     
@@ -99,8 +109,14 @@ def split_parallel_data(raw_dir, output_dir, train_ratio=0.98, val_ratio=0.01, m
         logging.info(f"Created {split_name} split with {end-start} sentence pairs\n")
 
 
-def process_data(raw_dir="./src/data/raw", processed_dir="./src/data/processed", 
-                vocab_size=32000, max_sentences=100000):
+def process_data(
+    raw_dir="./src/data/raw",
+    processed_dir="./src/data/processed",
+    train_ratio=TRAIN_RATIO,
+    val_ratio=VAL_RATIO,
+    vocab_size=VOCAB_SIZE,
+    max_sentences=MAX_SENTENCES
+):
     """
     Complete data processing pipeline:
     1. Split data into train/valid/test
@@ -116,7 +132,13 @@ def process_data(raw_dir="./src/data/raw", processed_dir="./src/data/processed",
     os.makedirs(processed_dir, exist_ok=True)
     
     # create data splits
-    split_parallel_data(raw_dir, processed_dir, max_sentences=max_sentences)
+    split_parallel_data(
+        raw_dir,
+        processed_dir,
+        train_ratio,
+        val_ratio,
+        max_sentences
+    )
     
     # combine all training data for BPE training
     combined_file = os.path.join(processed_dir, "combined_corpus.txt")
@@ -142,15 +164,32 @@ def process_data(raw_dir="./src/data/raw", processed_dir="./src/data/processed",
     logging.info("Data processing complete!\n")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Process WMT14 English-French dataset')
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - [%(levelname)s] - %(message)s')
+
+    parser = argparse.ArgumentParser(
+        description='Process WMT14 English-French dataset',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+
     parser.add_argument('--raw-dir', type=str, default='./src/data/raw',
                         help='Directory to save the raw dataset')
     parser.add_argument('--processed-dir', type=str, default='./src/data/processed',
                         help='Directory to save the processed dataset')
-    parser.add_argument('--vocab-size', type=int, default=32000,
+    parser.add_argument('--vocab-size', type=int, default=VOCAB_SIZE,
                         help='Vocabulary size')
-    parser.add_argument('--max-sentences', type=int, default=100000,
+    parser.add_argument('--max-sentences', type=int, default=MAX_SENTENCES,
                         help='Maximum number of sentence pairs to use')
+    parser.add_argument('--train-ratio', type=float, default=TRAIN_RATIO,
+                        help='Training ratio')
+    parser.add_argument('--val-ratio', type=float, default=VAL_RATIO,
+                        help='Validation ratio')
     args = parser.parse_args()
-    process_data(raw_dir=args.raw_dir, processed_dir=args.processed_dir, vocab_size=args.vocab_size, max_sentences=args.max_sentences)
+    process_data(
+        raw_dir=args.raw_dir,
+        processed_dir=args.processed_dir,
+        vocab_size=args.vocab_size,
+        max_sentences=args.max_sentences,
+        train_ratio=args.train_ratio,
+        val_ratio=args.val_ratio
+    )
     

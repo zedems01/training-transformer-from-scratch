@@ -6,7 +6,6 @@ import argparse
 from src.config import RAW_DATA_DIR
 from pathlib import Path
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - [%(levelname)s] - %(message)s')
 
 class DownloadProgressBar(tqdm):
     def update_to(self, b=1, bsize=1, tsize=None):
@@ -55,7 +54,12 @@ def download_wmt14_en_fr(data_dir=RAW_DATA_DIR):
     logging.info(f"Download complete! Dataset is ready in {data_dir}\n")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Download WMT14 English-French dataset')
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - [%(levelname)s] - %(message)s')
+    
+    parser = argparse.ArgumentParser(
+        description='Download WMT14 English-French dataset',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     parser.add_argument('--data-dir', type=str, default=str(RAW_DATA_DIR),
                         help='Directory to save the raw dataset')
     args = parser.parse_args()
