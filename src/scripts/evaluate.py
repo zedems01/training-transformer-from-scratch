@@ -5,7 +5,6 @@ from pathlib import Path
 from tqdm import tqdm
 
 import torch
-import torch.nn as nn
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader, Dataset
 import sacrebleu
@@ -198,10 +197,11 @@ def main():
         description="Evaluate Transformer on English-French test set",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument('--checkpoints-path', type=str,
-                        help='Path to checkpoints file (auto-detect latest if not provided)')
     parser.add_argument('--model-name', type=str, default="best",
-                        help='Name of the model, not including the extension. The path will be constructed')
+                        help='Name of the model. Use if model saved in the default checkpoints directory.\
+                        Use --checkpoints-path otherwise')
+    parser.add_argument('--checkpoints-path', type=str,
+                        help='Path to checkpoints file')
     parser.add_argument('--results-file', type=str,
                         help='Path to results file, not including the extension')
     parser.add_argument('--num-samples', type=int, default=5,
@@ -234,11 +234,14 @@ def main():
     logging.info(f"Vocabulary size: {vocab_size}")
 
     if args.model_name:
-        checkpoints_path = checkpoints_dir / f'{args.model_name}.pt'
+        base_model_name = args.model_name.removesuffix('.pt').removesuffix('.pth')
+        checkpoints_path = checkpoints_dir / f'{base_model_name}.pt'
         if not checkpoints_path.exists():
             raise FileNotFoundError(f"Checkpoints not found at {checkpoints_path}")
     elif args.checkpoints_path:
         checkpoints_path = Path(args.checkpoints_path)
+        if not checkpoints_path.suffix:
+            checkpoints_path = checkpoints_path.with_suffix('.pt')
         if not checkpoints_path.exists():
             raise FileNotFoundError(f"Checkpoints not found at {checkpoints_path}")
     else:
@@ -255,7 +258,6 @@ def main():
     epoch = checkpoints['epoch']
     loss = checkpoints['loss']
     logging.info(f"Checkpoints loaded - Epoch: {epoch}, Loss: {loss}")
-
 
     d_model = config['d_model']
     num_heads = config['heads']

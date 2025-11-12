@@ -42,13 +42,14 @@ D_FF = 512
 NUM_LAYERS = 1
 DROPOUT = 0.1
 BATCH_SIZE = 32
-EVAL_BATCH_SIZE = 16
 EPOCHS = 1
 LR = 5e-4
 MAX_SEQ_LEN = 128
 WARMUP_STEPS = 4000
 EARLY_STOPPING_PATIENCE = 3
 NUM_WORKERS = 0
+EVAL_BATCH_SIZE = 16
+INFERENCE_BATCH_SIZE = 8
 
 def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - [%(levelname)s] - %(message)s')
