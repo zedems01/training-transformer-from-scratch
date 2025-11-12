@@ -138,24 +138,6 @@ class EarlyStopping:
         return self.early_stop
 
 
-# def create_pad_mask(seq, pad_idx):
-#     """
-#     Create a padding mask for attention: (B, 1, 1, T)
-#     True/1 = valid token, False/0 = padded token
-#     Compatible with attention scores broadcasting
-#     """
-#     mask = (seq != pad_idx)     # (B, T)
-#     return mask.unsqueeze(1).unsqueeze(2)    # (B, 1, 1, T)
-
-# def create_subsequent_mask(seq_len, device):
-#     """
-#     Create causal mask for decoder's self-attention: (1, 1, T, T)
-#     True/1 = allowed position, False/0 = masked future position
-#     """
-#     mask = torch.triu(torch.ones(seq_len, seq_len, device=device), diagonal=1) == 0
-#     return mask.unsqueeze(0).unsqueeze(0)  # (1, 1, T, T)
-
-
 def train_one_epoch(model, dataloader, optimizer, scheduler, criterion, device, epoch):
     """Train the model for one epoch"""
     model.train()
@@ -244,18 +226,6 @@ def save_checkpoints(model, optimizer, epoch, loss, config, checkpoints_dir, mod
     logging.info(f"Checkpoint saved: {checkpoints_path}")
 
 
-# def load_checkpoints(model, optimizer, config, checkpoints_path):
-#     """Load model checkpoints."""
-#     checkpoints = torch.load(checkpoints_path)
-#     model.load_state_dict(checkpoints['model_state_dict'])
-#     optimizer.load_state_dict(checkpoints['optimizer_state_dict'])
-#     epoch = checkpoints['epoch']
-#     loss = checkpoints['loss']
-#     config = checkpoints['model_config']
-#     logging.info(f"Checkpoints loaded from epoch {epoch}, loss: {loss:.3f}")
-#     return epoch, loss, config
-
-
 def train_transformer(config):
     if not torch.cuda.is_available():
         raise ValueError("CUDA is not available")
@@ -311,7 +281,8 @@ def train_transformer(config):
         batch_size=batch_size,
         shuffle=True,
         collate_fn=TranslationDataset.collate_fn,
-        num_workers=num_workers
+        num_workers=num_workers,
+        pin_memory=True
     )
     
     val_loader = DataLoader(
@@ -319,7 +290,8 @@ def train_transformer(config):
         batch_size=batch_size,
         shuffle=False,
         collate_fn=TranslationDataset.collate_fn,
-        num_workers=num_workers
+        num_workers=num_workers,
+        pin_memory=True
     )
     
     model = Transformer(

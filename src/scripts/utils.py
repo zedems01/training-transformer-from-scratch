@@ -21,37 +21,6 @@ def create_subsequent_mask(seq_len, device):
     return mask.unsqueeze(0).unsqueeze(0)  # (1, 1, T, T)
 
 
-# def find_latest_checkpoints(checkpoints_dir):
-#     """Find the latest checkpoints in the checkpoints directory."""
-#     checkpoints_dir = Path(checkpoints_dir)
-#     if not checkpoints_dir.exists():
-#         raise FileNotFoundError(f"Checkpoints directory not found: {checkpoints_dir}")
-    
-#     checkpoints = list(checkpoints_dir.glob("*.pt"))
-#     if not checkpoints:
-#         raise FileNotFoundError(f"No checkpoints found in {checkpoints_dir}")
-    
-#     latest_checkpoints = max(checkpoints, key=lambda p: p.stat().st_mtime)
-#     return latest_checkpoints
-
-# def load_checkpoints(checkpoints_path, model, device):
-#     """Load model checkpoints."""
-#     checkpoints_path = Path(checkpoints_path)
-#     if not checkpoints_path.exists():
-#         raise FileNotFoundError(f"Checkpoints not found: {checkpoints_path}")
-    
-#     logging.info(f"Loading checkpoints from: {checkpoints_path}")
-#     checkpoints = torch.load(checkpoints_path, map_location=device)
-#     model.load_state_dict(checkpoints['model_state_dict'])
-    
-#     epoch = checkpoints['epoch']
-#     loss = checkpoints['loss']
-#     config = checkpoints['model_config']
-#     logging.info(f"Checkpoints loaded - Epoch: {epoch}, Loss: {loss}")
-    
-#     return model, config
-
-
 def greedy_decode(model, src, src_mask, max_len, device, bos_id=2, eos_id=3):
     """
     Greedy decoding for translation 
